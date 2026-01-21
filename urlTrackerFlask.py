@@ -250,7 +250,7 @@ def trace_url():
                 session.headers.update(headers)
 
                 try:
-                    response = session.get(start_url, allow_redirects=True)
+                    response = session.get(start_url, allow_redirects=True, timeout=(5, 15))
                     # On ne considère pas l'URL de départ comme une redirection
                     # Les redirections sont uniquement celles dans l'historique après la première
                     for resp in response.history[1:]:  # Commencer à partir du second élément de l'historique
