@@ -10,16 +10,25 @@ TEMPLATE = '''
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>URL Redirect Tracker</title>
     <style>
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+        html {
+            overflow-x: hidden;
+        }
         body {
             font-family: Arial, sans-serif;
             background-color: #f4f4f4;
             margin: 0;
-            padding: 20px;
+            padding: 10px;
+            overflow-x: hidden;
         }
         .container {
             max-width: 700px;
+            width: 100%;
             margin: 0 auto;
             background-color: white;
             padding: 20px;
@@ -33,11 +42,12 @@ TEMPLATE = '''
         }
         .trace-form input[type="text"], .trace-form button {
             width: 100%;
-            padding: 10px;
+            padding: 12px;
             margin: 5px 0;
             border-radius: 4px;
             border: 1px solid #ccc;
             box-sizing: border-box;
+            font-size: 16px;
         }
         .trace-form button {
             background-color: #007bff;
@@ -96,78 +106,78 @@ TEMPLATE = '''
             font-size: 1.5em;
         }
         
-	/* Source: https://codepo8.github.io/css-fork-on-github-ribbon */
-        /* GitHub Fork Ribbon */
-        #forkongithub a {
-            background: #000;
-            color: #fff;
-            text-decoration: none;
-            font-family: Arial, sans-serif;
-            text-align: center;
-            font-weight: bold;
-            padding: 5px 40px;
-            font-size: 1rem;
-            line-height: 2rem;
-            position: relative;
-            transition: 0.5s;
-        }
-        #forkongithub a:hover {
-            background: #3579f6;
-            color: #fff;
-        }
-        #forkongithub a::before,
-        #forkongithub a::after {
-            content: "";
-            width: 100%;
-            display: block;
-            position: absolute;
-            top: 1px;
-            left: 0;
-            height: 1px;
-            background: #fff;
-        }
-        #forkongithub a::after {
-            bottom: 1px;
-            top: auto;
-        }
-        @media screen and (min-width: 800px) {
-            #forkongithub {
-                position: absolute;
-                display: block;
-                top: 0;
-                right: 0;
-                width: 200px;
-                overflow: hidden;
-                height: 200px;
-                z-index: 9999;
-            }
-            #forkongithub a {
-                width: 200px;
-                position: absolute;
-                top: 60px;
-                right: -60px;
-                transform: rotate(45deg);
-                -webkit-transform: rotate(45deg);
-                -ms-transform: rotate(45deg);
-                -moz-transform: rotate(45deg);
-                -o-transform: rotate(45deg);
-                box-shadow: 4px 4px 10px rgba(0, 0, 0, 0.8);
-            }
-        }
         /* Footer */
         footer {
             text-align: center;
-            margin-top: 20px;
-            padding-top: 10px;
-            border-top: 1px solid #ccc;
+            margin-top: 30px;
+            padding: 20px 10px;
+            border-top: 1px solid #e0e0e0;
             font-size: 0.9em;
+            color: #666;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
         }
         footer a {
             text-decoration: none;
+            color: #666;
+            transition: color 0.3s ease;
+        }
+        footer a:hover {
             color: #007bff;
         }
-        footer span {
-            margin: 0 5px;
+        .footer-separator {
+            width: 60px;
+            height: 1px;
+            background-color: #ddd;
+            margin: 5px 0;
+        }
+        
+        @media screen and (max-width: 576px) {
+            body {
+                padding: 5px;
+            }
+            .container {
+                padding: 15px;
+            }
+            .header h2 {
+                font-size: 1.5em;
+            }
+            .status-code {
+                font-size: 0.8em;
+                padding: 2px 4px;
+            }
+            .start-url, .redirection, .final-url {
+                padding: 8px;
+                margin: 8px 0;
+            }
+            .arrow {
+                font-size: 1.2em;
+            }
+            footer {
+                font-size: 0.8em;
+                padding: 15px 10px;
+                gap: 8px;
+            }
+            .footer-separator {
+                width: 40px;
+            }
+        }
+        
+        @media screen and (min-width: 577px) and (max-width: 768px) {
+            body {
+                padding: 15px;
+            }
+            .container {
+                padding: 18px;
+            }
+        }
+        
+        @media screen and (min-width: 1200px) {
+            .container {
+                max-width: 900px;
+            }
         }
     </style>
 
@@ -204,11 +214,11 @@ TEMPLATE = '''
         </div>
         {% endfor %}
     </div>
-    <!-- GitHub Fork Ribbon -->
-    <span id="forkongithub"><a href="https://github.com/Secteur1">Fork me on GitHub</a></span>
     <!-- Footer -->
     <footer>
-        Made with ❤️ <span>•</span> By <a href="https://github.com/f-peng">Frédéric</a>
+        Made with ❤️ by <a href="https://github.com/f-peng">Frédéric</a>
+        <div class="footer-separator"></div>
+        <a href="https://github.com/f-peng/urlTracker">github.com/f-peng/urlTracker</a>
     </footer>
 </body>
 </html>
