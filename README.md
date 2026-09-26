@@ -8,7 +8,7 @@
 
 - Tracking HTTP redirects from a specified URL;
 - Displaying HTTP status codes and URLs for each redirect step;
-- Prohibiting LAN addresses (192.168.*, 172.16.*, 10.*) for security reasons;
+- Only http/https on ports 80/443 to public addresses: every redirect step is resolved and checked (private, loopback, link-local and internal names are refused);
 - Containerized with Docker for easy installation and execution.
 
 ## Prerequisites
@@ -126,7 +126,7 @@ Files skipped (0):
 
 - Suivi des redirections HTTP à partir d'une URL spécifiée ;
 - Affichage des codes de statut HTTP et des URL pour chaque étape de redirection ;
-- Interdiction des adresses LAN (192.168.*, 172.16.*, 10.*) pour des raisons de sécurité ;
+- Uniquement http/https sur les ports 80/443 vers des adresses publiques : chaque étape de redirection est résolue et vérifiée (adresses privées, de bouclage, link-local et noms internes refusés) ;
 - Conteneurisé avec Docker pour une installation et une exécution faciles.
 
 ## Prérequis

@@ -1,21 +1,18 @@
-# Utiliser une image de base Python Alpine pour minimiser la taille de l'image
-FROM python:3.9-alpine
+# Étape de construction : dépendances dans un venv sans pip
+FROM python:3.13-alpine AS build
+COPY requirements.txt /tmp/
+RUN python -m venv --without-pip /venv \
+    && pip --python /venv/bin/python install --no-cache-dir -r /tmp/requirements.txt
 
-# Définir le répertoire de travail dans le conteneur
+# Image finale : paquets Alpine à jour, sans pip (ses dépendances embarquées ressortent au scan)
+FROM python:3.13-alpine
+RUN apk upgrade --no-cache \
+    && pip uninstall -y pip
+COPY --from=build /venv /venv
 WORKDIR /app
-
-# Installer les dépendances nécessaires pour compiler certaines des dépendances Python
-# Puis installez Gunicorn avec pip
-COPY requirements.txt /app/
-RUN apk add --no-cache build-base linux-headers \
-    && pip install --no-cache-dir -r requirements.txt \
-    && pip install gunicorn
-
-# Copier le reste des fichiers de l'application dans le conteneur
-COPY urlTrackerFlask.py /app
-
-# Exposer le port sur lequel Gunicorn va s'exécuter
+COPY urlTrackerFlask.py .
+ENV PATH=/venv/bin:$PATH PYTHONDONTWRITEBYTECODE=1
+USER 10001:10001
 EXPOSE 8000
-
-# Exécuter l'application avec Gunicorn
-CMD ["gunicorn", "--access-logfile", "-", "--error-logfile", "-", "-b", "0.0.0.0:8000", "urlTrackerFlask:app"]
+# Système de fichiers en lecture seule : battements des workers dans /dev/shm, pas de socket de contrôle
+CMD ["gunicorn", "--access-logfile", "-", "--error-logfile", "-", "--worker-tmp-dir", "/dev/shm", "--no-control-socket", "-b", "0.0.0.0:8000", "urlTrackerFlask:app"]
