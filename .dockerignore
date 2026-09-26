@@ -1,0 +1,4 @@
+# Seuls requirements.txt et urlTrackerFlask.py entrent dans l'image
+*
+!requirements.txt
+!urlTrackerFlask.py

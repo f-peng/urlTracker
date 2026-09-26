@@ -1,9 +1,23 @@
 from flask import Flask, request, render_template_string, flash, get_flashed_messages
 import requests
-import re
+import ipaddress
+import os
+import secrets
+import socket
+import time
+from urllib.parse import urljoin, urlsplit
 
 app = Flask(__name__)
-app.secret_key = 'your_very_secure_secret_key'  # Changez ceci pour votre clé secrète réelle.
+# Sans SECRET_KEY, une clé aléatoire par processus suffit : les messages flash sont lus dans la même requête.
+app.secret_key = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
+
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
+}
+ALLOWED_PORTS = {'http': 80, 'https': 443}
+MAX_REDIRECTS = 10
+TIMEOUT = (5, 10)  # connexion, lecture
+DEADLINE = 25  # secondes pour toute la chaîne, sous le timeout de 30 s de gunicorn
 
 TEMPLATE = '''
 <!DOCTYPE html>
@@ -224,11 +238,58 @@ TEMPLATE = '''
 </html>
 '''
 
-# Vérifie si l'URL est une adresse LAN
-def is_lan_address(url):
-    # Modèle de regex pour les adresses LAN
-    lan_pattern = r'^(https?|ftp):\/\/(192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|10\.)(\d{1,3}\.\d{1,3})'
-    return re.match(lan_pattern, url) is not None
+class TraceError(Exception):
+    """Suivi refusé ou interrompu ; le message est affiché tel quel."""
+
+
+def check_url(url):
+    """Refuse toute URL qui ne mène pas, en http(s) sur le port standard, à une adresse publique.
+
+    Le nom est résolu et chacune de ses adresses est vérifiée : cela couvre localhost, les
+    réseaux privés, link-local, CGNAT, et les noms internes (services du cluster, par exemple).
+    """
+    parts = urlsplit(url)
+    if parts.scheme not in ALLOWED_PORTS:
+        raise TraceError('Seules les URL http et https sont acceptées.')
+    try:
+        port = parts.port
+    except ValueError:
+        raise TraceError('URL invalide.')
+    if not parts.hostname:
+        raise TraceError('URL invalide.')
+    if port not in (None, ALLOWED_PORTS[parts.scheme]):
+        raise TraceError('Seuls les ports 80 et 443 sont acceptés.')
+    try:
+        infos = socket.getaddrinfo(parts.hostname, port or ALLOWED_PORTS[parts.scheme], type=socket.SOCK_STREAM)
+    except (socket.gaierror, UnicodeError):
+        raise TraceError(f'Nom de domaine introuvable : {parts.hostname}')
+    for *_, sockaddr in infos:
+        ip = ipaddress.ip_address(sockaddr[0].split('%')[0])
+        if ip.version == 6 and ip.ipv4_mapped:
+            ip = ip.ipv4_mapped
+        if not ip.is_global:
+            raise TraceError('Les adresses internes ne sont pas autorisées.')
+
+
+def trace(start_url):
+    """Suit les redirections une à une, en vérifiant chaque étape ; renvoie [(statut, url), …]."""
+    session = requests.Session()
+    session.trust_env = False  # pas de proxy ni de .netrc venant de l'environnement
+    session.headers.update(HEADERS)
+    deadline = time.monotonic() + DEADLINE
+    hops = []
+    url = start_url
+    for _ in range(MAX_REDIRECTS + 1):
+        if time.monotonic() > deadline:
+            raise TraceError('Délai dépassé.')
+        check_url(url)
+        # stream : seuls le statut et les en-têtes comptent, le corps n'est pas téléchargé
+        with session.get(url, allow_redirects=False, timeout=TIMEOUT, stream=True) as resp:
+            hops.append((resp.status_code, resp.url))
+            if not resp.is_redirect:
+                return hops
+            url = urljoin(resp.url, resp.headers['Location'])
+    raise TraceError(f'Plus de {MAX_REDIRECTS} redirections.')
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -237,29 +298,16 @@ def trace_url():
     start_url = ''  # Initialiser la variable pour l'URL de départ
 
     if request.method == 'POST':
-        start_url = request.form.get('url')
+        start_url = request.form.get('url', '').strip()
         if start_url:
-            # Vérifier si l'URL est une adresse LAN
-            if is_lan_address(start_url):
-                flash('Les adresses LAN ne sont pas autorisées.', 'error')
-            else:
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
-                }
-                session = requests.Session()
-                session.headers.update(headers)
-
-                try:
-                    response = session.get(start_url, allow_redirects=True, timeout=(5, 15))
-                    # On ne considère pas l'URL de départ comme une redirection
-                    # Les redirections sont uniquement celles dans l'historique après la première
-                    for resp in response.history[1:]:  # Commencer à partir du second élément de l'historique
-                        results.append((resp.status_code, resp.url))
-                    # Ajouter la réponse finale si elle est différente
-                    if not response.history or response.history[-1].url != response.url:
-                        results.append((response.status_code, response.url))
-                except requests.RequestException as e:
-                    flash(f"Erreur de suivi de l'URL : {e}", 'error')
+            try:
+                hops = trace(start_url)
+                # L'URL de départ est affichée à part : on ne la répète que s'il n'y a pas eu de redirection
+                results = hops[1:] or hops
+            except TraceError as e:
+                flash(str(e), 'error')
+            except requests.RequestException as e:
+                flash(f"Erreur de suivi de l'URL : {e}", 'error')
         else:
             flash('Veuillez entrer une URL à tracer.', 'warning')
 
@@ -267,4 +315,4 @@ def trace_url():
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run()
