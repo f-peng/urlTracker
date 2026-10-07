@@ -175,7 +175,7 @@ Assurez-vous de remplacer cette valeur par une clé secrète unique et sécuris�
 
 ## Todo
 
-Mettre en place une fonction de nettoyage des URL (eg. utm_*, etc.).
+Fait : case « Nettoyer l'URL finale » (retire utm_*, fbclid, gclid, irclickid…). Idée : liste de paramètres configurable.
 
 ## Auteur
 
