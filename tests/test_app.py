@@ -4,7 +4,7 @@ import pytest
 import responses
 
 import urlTrackerFlask as app_module
-from urlTrackerFlask import TraceError, app, check_url, trace
+from urlTrackerFlask import TraceError, app, check_url, clean_url, trace
 
 PUBLIC = '93.184.215.14'
 
@@ -199,3 +199,34 @@ def test_page_refuse_interne(dns):
 def test_page_url_vide(dns):
     page = app.test_client().post('/', data={'url': ' '}).get_data(as_text=True)
     assert 'Veuillez entrer une URL' in page
+
+
+def test_nettoyage_retire_les_parametres_de_suivi():
+    url = ('https://www.coursera.org/google-certificates/google-ai?irclickid=xRf&irgwc=1&afsrc=1&utm_medium=partners'
+           '&UTM_Source=impact&cuid=ppr-fr-1&=&lang=fr#plans')
+    cleaned, removed = clean_url(url)
+    assert cleaned == 'https://www.coursera.org/google-certificates/google-ai?lang=fr#plans'
+    assert removed == ['irclickid', 'irgwc', 'afsrc', 'utm_medium', 'UTM_Source', 'cuid', '(sans nom)']
+
+
+@pytest.mark.parametrize('url', [
+    'https://a.test/', 'https://a.test/p?id=3&q=a%20b&page=2', 'https://a.test/?key=abc&ref=x'])
+def test_nettoyage_ne_touche_pas_au_reste(url):
+    assert clean_url(url) == (url, [])
+
+
+def test_nettoyage_supprime_le_point_d_interrogation_vide():
+    assert clean_url('https://a.test/p?utm_source=x&fbclid=y') == ('https://a.test/p', ['utm_source', 'fbclid'])
+
+
+@responses.activate
+def test_page_option_nettoyage(dns):
+    dns['a.test'] = [PUBLIC]
+    responses.get('http://a.test/', status=301, headers={'Location': 'http://a.test/b?utm_source=x&id=7'})
+    responses.get('http://a.test/b?utm_source=x&id=7', status=200)
+    client = app.test_client()
+    sans = client.post('/', data={'url': 'http://a.test/'}).get_data(as_text=True)
+    avec = client.post('/', data={'url': 'http://a.test/', 'clean': '1'}).get_data(as_text=True)
+    assert 'URL finale nettoyée' not in sans and 'name="clean" value="1" >' in sans
+    assert '<div class="url">http://a.test/b?id=7</div>' in avec and 'Paramètres retirés : utm_source' in avec
+    assert 'value="1" checked>' in avec
