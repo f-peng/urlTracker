@@ -8,7 +8,7 @@ import socket
 import time
 from html.parser import HTMLParser
 from http import HTTPStatus
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import unquote_plus, urljoin, urlsplit, urlunsplit
 from urllib3.exceptions import HTTPError as Urllib3Error
 
 app = Flask(__name__)
@@ -79,6 +79,10 @@ TEMPLATE = '''
             background-color: #0056b3;
         }
 
+        .option { display: block; margin: 6px 0; font-size: 0.9em; color: #555; }
+        .cleaned { margin: 15px 0; padding: 10px; background: #e8f4fd; border: 1px solid #b6dcf6; overflow-wrap: anywhere; }
+        .cleaned .url { font-family: monospace; font-size: 0.95em; user-select: all; }
+        .cleaned p { margin: 6px 0 0; font-size: 0.85em; color: #555; }
         .summary {
             margin: 15px 0 5px;
             color: #555;
@@ -213,6 +217,10 @@ TEMPLATE = '''
         <div class="trace-form">
             <form method="post">
                 <input type="text" name="url" placeholder="Enter the URL">
+                <label class="option">
+                    <input type="checkbox" name="clean" value="1" {{ 'checked' if clean }}>
+                    Nettoyer l'URL finale (paramètres de suivi : utm_*, fbclid, gclid…)
+                </label>
                 <button type="submit">Trace URL</button>
             </form>
         </div>
@@ -252,6 +260,13 @@ TEMPLATE = '''
             {% if hop.note %}<p class="note">{{ hop.note }}</p>{% endif %}
         </div>
         {% endfor %}
+        {% if cleaned %}
+        <div class="cleaned">
+            <strong>URL finale nettoyée</strong>
+            <div class="url">{{ cleaned[0] }}</div>
+            <p>{% if cleaned[1] %}Paramètres retirés : {{ cleaned[1] | join(', ') }}{% else %}Rien à retirer : aucun paramètre de suivi connu.{% endif %}</p>
+        </div>
+        {% endif %}
         {% if failure %}
         <div class="hop err">
             <div class="head">
@@ -272,6 +287,35 @@ TEMPLATE = '''
 </body>
 </html>
 '''
+
+# Paramètres de suivi (publicité, affiliation, newsletters) : sans effet sur la page elle-même.
+# Liste volontairement prudente : un paramètre ambigu (key, ref, id…) reste en place.
+TRACKING_PREFIXES = ('utm_', 'hsa_', 'oly_', 'pk_', 'mtm_', 'matomo_')
+TRACKING_PARAMS = {
+    'fbclid', 'gclid', 'gclsrc', 'dclid', 'gbraid', 'wbraid', 'msclkid', 'yclid', 'twclid', 'ttclid', 'li_fat_id',
+    'igshid', 'irclickid', 'irgwc', 'afsrc', 'mc_cid', 'mc_eid', '_ga', '_gl', '_hsenc', '_hsmi', 'hsctatracking',
+    'mkt_tok', 'vero_id', 'wickedid', 'spm', 'scid', 'sc_cid', 'ref_src', 'ref_url', 'cmpid', 'cuid', 'campaignid',
+    's_kwcid', 'ef_id', 'cjevent', 'awc', 'sscid', 'srsltid', 'trk', 'trkcampaign',
+}
+
+
+def clean_url(url):
+    """Retire les paramètres de suivi d'une URL ; renvoie (url nettoyée, noms retirés).
+
+    Le reste de la requête est conservé tel quel (ordre et encodage). Le fragment ne change pas.
+    """
+    parts = urlsplit(url)
+    kept, removed = [], []
+    for pair in parts.query.split('&'):
+        if not pair:
+            continue
+        name = unquote_plus(pair.split('=', 1)[0]).lower()
+        if not name or name in TRACKING_PARAMS or name.startswith(TRACKING_PREFIXES):
+            removed.append(unquote_plus(pair.split('=', 1)[0]) or '(sans nom)')
+        else:
+            kept.append(pair)
+    return urlunsplit(parts._replace(query='&'.join(kept))), removed
+
 
 class TraceError(Exception):
     """Suivi refusé ou interrompu ; le message est affiché tel quel.
@@ -460,20 +504,23 @@ def trace(start_url):
 
 @app.route('/', methods=['GET', 'POST'])
 def trace_url():
-    hops, failure, failure_url = [], None, None
+    hops, failure, failure_url, cleaned = [], None, None, None
+    clean = request.form.get('clean') == '1'
 
     if request.method == 'POST':
         start_url = request.form.get('url', '').strip()
         if start_url:
             try:
                 hops = trace(start_url)
+                if clean:
+                    cleaned = clean_url(hops[-1]['url'])
             except TraceError as e:
                 hops, failure, failure_url = e.hops, str(e), e.url
         else:
             flash('Veuillez entrer une URL à tracer.', 'warning')
 
     return render_template_string(
-        TEMPLATE, hops=hops, failure=failure, failure_url=failure_url,
+        TEMPLATE, hops=hops, failure=failure, failure_url=failure_url, clean=clean, cleaned=cleaned,
         redirections=sum(1 for h in hops if h['kind']), total_ms=sum(h['ms'] for h in hops))
 
 

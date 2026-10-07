@@ -57,7 +57,7 @@ Make sure to replace this value with a unique and secure secret key before deplo
 
 ## Todo
 
-Implement a URL cleaning function (e.g., utm_*, etc.).
+Done: optional "clean the final URL" checkbox (removes utm_*, fbclid, gclid, irclickid…). Ideas: configurable parameter list.
 
 ## Author
 
